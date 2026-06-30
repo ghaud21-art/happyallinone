@@ -149,6 +149,9 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
 .tab-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .tab-close { width: 16px; height: 16px; border-radius: 50%; background: rgba(0,0,0,0.08); border: none; cursor: pointer; font-size: 10px; color: var(--sub); display: none; align-items: center; justify-content: center; }
 .tab-btn:hover .tab-close { display: flex; }
+.tab-edit { width: 16px; height: 16px; border-radius: 50%; background: none; border: none; cursor: pointer; font-size: 11px; color: var(--sub); display: none; align-items: center; justify-content: center; opacity: 0.7; }
+.tab-edit:hover { opacity: 1; background: rgba(0,0,0,0.06); }
+.tab-btn:hover .tab-edit { display: flex; }
 .tab-add { padding: 9px 12px 10px; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; background: none; border: none; transition: color 0.15s; flex-shrink: 0; }
 .tab-add:hover { color: var(--sub); }
 
@@ -634,7 +637,7 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
 //  (Apps Script 에디터 → 배포 → 새 배포 → 웹 앱 → 생성된 URL 복사)
 //  예) https://script.google.com/macros/s/AKfycb.../exec
 // ══════════════════════════════════════════════════════════════
-const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxMgH4yP4-dpOvMnSAEhrzI6Vdvv-_qIVgV2zp2EstNmOtHAbbtigrHQC61n1w72ajt/exec';
+const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxUaXDWnBPEeOfCra07LvoLK_ygOkS5NVvscmSCJHthKtBksQVjkgHp1WVCH8MYY4TZ/exec';
 
 /**
  * GAS 백엔드에 action 이름과 payload를 보내고 결과를 받아오는 공용 함수.
@@ -984,8 +987,8 @@ function renderTabs() {
   S.tabs.forEach((tab,i)=>{
     const btn=document.createElement('button');
     btn.className='tab-btn'+(i===S.activeTab?' active':'');
-    btn.innerHTML=`<span class="tab-dot" style="background:${tab.color}"></span>${tab.name}<button class="tab-close" onclick="removeTab(event,${i})">✕</button>`;
-    btn.onclick=e=>{if(!e.target.classList.contains('tab-close'))switchTab(i);};
+    btn.innerHTML=`<span class="tab-dot" style="background:${tab.color}"></span>${tab.name}<button class="tab-edit" onclick="quickRenameTab(event,${i})" title="탭 이름 수정">✏️</button><button class="tab-close" onclick="removeTab(event,${i})">✕</button>`;
+    btn.onclick=e=>{if(!e.target.classList.contains('tab-close')&&!e.target.classList.contains('tab-edit'))switchTab(i);};
     bar.insertBefore(btn,add);
   });
 }
@@ -1006,6 +1009,24 @@ async function removeTab(e,i){
   if(S.activeTab>=S.tabs.length)S.activeTab=S.tabs.length-1;
   S.activeStudent=null;
   renderTabs(); await loadRosterForActiveTab(); hideLoading(); renderContent();
+}
+
+/** 탭바의 ✏️ 아이콘 클릭 - 가벼운 prompt로 바로 이름 변경 (설정 패널 진입 불필요) */
+async function quickRenameTab(e,i){
+  e.stopPropagation();
+  const tab = S.tabs[i];
+  const newName = prompt('새 탭 이름을 입력하세요', tab.name);
+  if (!newName || !newName.trim() || newName.trim() === tab.name) return;
+
+  showLoading('이름 변경 중...');
+  try {
+    const result = await api('updateTabName', { tabId: tab.id, newName: newName.trim() });
+    if (!result.success) { hideLoading(); alert(result.message); return; }
+  } catch(err){ hideLoading(); alert('이름 변경 실패: '+err.message); return; }
+  tab.name = newName.trim();
+  hideLoading();
+  renderTabs();
+  if (i === S.activeTab) renderContent();
 }
 
 /**
