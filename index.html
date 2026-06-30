@@ -633,7 +633,7 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
 //  (Apps Script 에디터 → 배포 → 새 배포 → 웹 앱 → 생성된 URL 복사)
 //  예) https://script.google.com/macros/s/AKfycb.../exec
 // ══════════════════════════════════════════════════════════════
-const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbwIB7hi8wn5Thufm3ti1BG-37zSvdyttAsZuHBvmkIKPdh3FsvXmP-R3pN58NNXVeam/exec';
+const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxMgH4yP4-dpOvMnSAEhrzI6Vdvv-_qIVgV2zp2EstNmOtHAbbtigrHQC61n1w72ajt/exec';
 
 /**
  * GAS 백엔드에 action 이름과 payload를 보내고 결과를 받아오는 공용 함수.
@@ -983,8 +983,10 @@ function renderTabs() {
   S.tabs.forEach((tab,i)=>{
     const btn=document.createElement('button');
     btn.className='tab-btn'+(i===S.activeTab?' active':'');
+    btn.title='더블클릭하면 탭 이름을 수정할 수 있어요';
     btn.innerHTML=`<span class="tab-dot" style="background:${tab.color}"></span>${tab.name}<button class="tab-close" onclick="removeTab(event,${i})">✕</button>`;
     btn.onclick=e=>{if(!e.target.classList.contains('tab-close'))switchTab(i);};
+    btn.ondblclick=e=>{e.stopPropagation();renameTab(i);};
     bar.insertBefore(btn,add);
   });
 }
@@ -1005,6 +1007,29 @@ async function removeTab(e,i){
   if(S.activeTab>=S.tabs.length)S.activeTab=S.tabs.length-1;
   S.activeStudent=null;
   renderTabs(); await loadRosterForActiveTab(); hideLoading(); renderContent();
+}
+
+/**
+ * 탭 이름 수정. 인자 없이 호출하면 현재 활성 탭을, 인덱스를 넘기면 해당 탭을 수정합니다.
+ * ⚠️ Drive 폴더는 이름 변경 전 만들어진 게 그대로 유지되고, 새 업로드/제출분만 새 이름 폴더로 들어갑니다.
+ */
+async function renameTab(i){
+  const idx = (typeof i === 'number') ? i : S.activeTab;
+  const tab = S.tabs[idx];
+  if (!tab) return;
+  const newName = prompt('새 탭 이름을 입력하세요', tab.name);
+  if (!newName || !newName.trim() || newName.trim() === tab.name) return;
+
+  showLoading('이름 변경 중...');
+  try {
+    const result = await api('updateTabName', { tabId: tab.id, newName: newName.trim() });
+    if (!result.success) { hideLoading(); alert(result.message); return; }
+  } catch(err){ hideLoading(); alert('이름 변경 실패: '+err.message); return; }
+  tab.name = newName.trim();
+  hideLoading();
+  renderTabs();
+  if (idx === S.activeTab) renderContent();
+  alert('탭 이름이 변경되었습니다.\n(참고: 기존에 업로드/제출된 파일의 Drive 폴더명은 이전 이름 그대로 유지되며, 새로 업로드/제출되는 파일부터 새 이름 폴더에 저장됩니다.)');
 }
 
 /** 현재 활성 탭의 학생 명단을 서버에서 받아와 S.tabs[활성탭].roster에 채움 */
@@ -1076,7 +1101,10 @@ function renderContent(){
   let h=`<div class="s-header" style="border-left:4px solid ${tab.color}">
     <div class="s-avatar" style="background:${bg}">${name[0]}</div>
     <div><div class="s-name">${name}</div><div class="s-meta">${num} · ${tab.name} · ${S.year}학년도${rosterEntry.hasPin?'':' · <span style="color:#d49a4a">PIN 미설정</span>'}</div></div>
-    <div class="s-header-right"><button class="btn sm" onclick="openSettings()">⚙️ 모듈 설정</button></div>
+    <div class="s-header-right" style="display:flex;gap:6px">
+      <button class="btn sm" onclick="renameTab()">✏️ 탭 이름 수정</button>
+      <button class="btn sm" onclick="openSettings()">⚙️ 모듈 설정</button>
+    </div>
   </div>`;
 
   // 누가기록 (개수 제한 없음)
@@ -1154,6 +1182,7 @@ function renderContent(){
               <a href="#" onclick="downloadSubmission('${s.fileId}');return false;" style="color:var(--text);text-decoration:underline">${s.fileName}</a>
               <span style="color:var(--muted);font-size:11px">${formatDate(s.submittedAt)}</span>
               ${si===0?'<span style="font-size:10px;background:var(--green-light);color:var(--green-text);padding:1px 7px;border-radius:20px">최신</span>':''}
+              <button class="roster-del-btn" style="margin-left:auto" onclick="deleteSubmission(${s.rowIndex},'${s.fileId}')" title="제출 파일 삭제">✕</button>
             </div>
             <div style="display:flex;gap:6px;margin-top:4px;align-items:center">
               <input class="ws-note" id="note-inp-${s.rowIndex}" value="${s.note||''}" placeholder="교사 메모 (학생에게 보이지 않음)...">
@@ -1463,6 +1492,24 @@ function formatDate(d){
 async function downloadSubmission(fileId){
   // 교사는 본인 파일이므로 Drive 파일 보기 링크로 바로 이동 (소유자라 추가 인증 불필요)
   window.open(`https://drive.google.com/file/d/${fileId}/view`, '_blank');
+}
+
+/** 교사 - 학생이 제출한 파일 삭제 (Drive에서도 함께 삭제됨, 휴지통 이동이라 복구 가능) */
+async function deleteSubmission(rowIndex, fileId){
+  if (!confirm('이 제출 파일을 삭제할까요?\n구글 드라이브 휴지통으로 이동되며, 학생 화면에서도 즉시 사라집니다.')) return;
+  showLoading('삭제 중...');
+  try {
+    await api('deleteSubmission', { rowIndex, fileId });
+    const tab = S.tabs[S.activeTab];
+    const d = td(tab.id, S.activeStudent);
+    d.worksheets.forEach(w => {
+      const idx = w.submissions.findIndex(s => s.rowIndex === rowIndex);
+      if (idx > -1) w.submissions.splice(idx, 1);
+      w.submitted = w.submissions.length > 0;
+    });
+  } catch(err){ hideLoading(); alert('삭제 실패: '+err.message); return; }
+  hideLoading();
+  renderContent();
 }
 
 async function toggleArchive(tabId,i){
