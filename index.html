@@ -379,7 +379,7 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
   <div class="login-brand">
     <div class="login-brand-emoji" id="brand-emoji">🏫</div>
     <div class="login-brand-title" id="brand-title">행복함성 지니쌤</div>
-    <div class="login-brand-school" id="brand-school">함성고등학교</div>
+    <div class="login-brand-school" id="brand-school">대평고등학교</div>
     <div class="login-brand-year" id="brand-year">2026학년도</div>
   </div>
 
@@ -520,7 +520,7 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
       <div class="panel-sec-title">앱 기본 정보</div>
       <div class="field-row"><div class="field-lbl">앱 아이콘 (이모지)</div><input class="f-inp w80" id="cfg-emoji" value="🏫" maxlength="2"></div>
       <div class="field-row"><div class="field-lbl">앱 제목 <small>로그인 화면 · 상단바에 표시</small></div><input class="f-inp w160" id="cfg-title" value="행복함성 지니쌤"></div>
-      <div class="field-row"><div class="field-lbl">학교명 <small>로그인 화면 서브타이틀</small></div><input class="f-inp w160" id="cfg-school" value="함성고등학교"></div>
+      <div class="field-row"><div class="field-lbl">학교명 <small>로그인 화면 서브타이틀</small></div><input class="f-inp w160" id="cfg-school" value="대평고등학교"></div>
       <div class="field-row"><div class="field-lbl">현재 학년도</div><input class="f-inp w80" id="cfg-year" value="2026"></div>
       <div class="field-row"><div class="field-lbl">AI 생기부 글자 수 제한</div><input class="f-inp w80" id="cfg-chars" type="number" value="500"></div>
     </div>
@@ -586,6 +586,7 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
         폴더 ID는 폴더를 열었을 때 주소창의 <strong>/folders/ 뒤</strong> 부분입니다.
       </div>
     </div>
+    <div class="panel-sec" id="s-name-sec"></div>
     <div class="panel-sec" id="s-mod-sec"></div>
     <div class="panel-foot">
       <button class="btn" onclick="closeSettings()">취소</button>
@@ -983,10 +984,8 @@ function renderTabs() {
   S.tabs.forEach((tab,i)=>{
     const btn=document.createElement('button');
     btn.className='tab-btn'+(i===S.activeTab?' active':'');
-    btn.title='더블클릭하면 탭 이름을 수정할 수 있어요';
     btn.innerHTML=`<span class="tab-dot" style="background:${tab.color}"></span>${tab.name}<button class="tab-close" onclick="removeTab(event,${i})">✕</button>`;
     btn.onclick=e=>{if(!e.target.classList.contains('tab-close'))switchTab(i);};
-    btn.ondblclick=e=>{e.stopPropagation();renameTab(i);};
     bar.insertBefore(btn,add);
   });
 }
@@ -1013,25 +1012,6 @@ async function removeTab(e,i){
  * 탭 이름 수정. 인자 없이 호출하면 현재 활성 탭을, 인덱스를 넘기면 해당 탭을 수정합니다.
  * ⚠️ Drive 폴더는 이름 변경 전 만들어진 게 그대로 유지되고, 새 업로드/제출분만 새 이름 폴더로 들어갑니다.
  */
-async function renameTab(i){
-  const idx = (typeof i === 'number') ? i : S.activeTab;
-  const tab = S.tabs[idx];
-  if (!tab) return;
-  const newName = prompt('새 탭 이름을 입력하세요', tab.name);
-  if (!newName || !newName.trim() || newName.trim() === tab.name) return;
-
-  showLoading('이름 변경 중...');
-  try {
-    const result = await api('updateTabName', { tabId: tab.id, newName: newName.trim() });
-    if (!result.success) { hideLoading(); alert(result.message); return; }
-  } catch(err){ hideLoading(); alert('이름 변경 실패: '+err.message); return; }
-  tab.name = newName.trim();
-  hideLoading();
-  renderTabs();
-  if (idx === S.activeTab) renderContent();
-  alert('탭 이름이 변경되었습니다.\n(참고: 기존에 업로드/제출된 파일의 Drive 폴더명은 이전 이름 그대로 유지되며, 새로 업로드/제출되는 파일부터 새 이름 폴더에 저장됩니다.)');
-}
-
 /** 현재 활성 탭의 학생 명단을 서버에서 받아와 S.tabs[활성탭].roster에 채움 */
 async function loadRosterForActiveTab(){
   const tab = S.tabs[S.activeTab];
@@ -1101,9 +1081,8 @@ function renderContent(){
   let h=`<div class="s-header" style="border-left:4px solid ${tab.color}">
     <div class="s-avatar" style="background:${bg}">${name[0]}</div>
     <div><div class="s-name">${name}</div><div class="s-meta">${num} · ${tab.name} · ${S.year}학년도${rosterEntry.hasPin?'':' · <span style="color:#d49a4a">PIN 미설정</span>'}</div></div>
-    <div class="s-header-right" style="display:flex;gap:6px">
-      <button class="btn sm" onclick="renameTab()">✏️ 탭 이름 수정</button>
-      <button class="btn sm" onclick="openSettings()">⚙️ 모듈 설정</button>
+    <div class="s-header-right">
+      <button class="btn sm" onclick="openSettings()">⚙️ 탭 설정</button>
     </div>
   </div>`;
 
@@ -1737,6 +1716,16 @@ async function openSettings(){
   renderSheetList();
   renderDriveList();
   const tab=S.tabs[S.activeTab];
+  document.getElementById('s-name-sec').innerHTML=
+    `<div class="panel-sec-title">「${tab.name}」 탭 설정</div>
+    <div class="field-row">
+      <div class="field-lbl">탭 이름</div>
+      <input class="f-inp w160" id="cfg-tabname" value="${tab.name}">
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.6">
+      💡 이름을 바꿔도 기존 누가기록·칭찬·학습지 데이터는 그대로 유지됩니다.<br>
+      단, 이미 업로드/제출된 파일의 구글드라이브 폴더명은 이전 이름 그대로 남고, 앞으로 올라가는 파일부터 새 이름 폴더에 저장됩니다.
+    </div>`;
   document.getElementById('s-mod-sec').innerHTML=
     `<div class="panel-sec-title">「${tab.name}」 모듈 ON/OFF</div>`+
     MOD_DEFS.map(m=>`<div class="mrow">
@@ -1828,6 +1817,7 @@ async function saveSettings(){
   S.aiChars=parseInt(document.getElementById('cfg-chars').value)||500;
 
   const tab=S.tabs[S.activeTab];
+  const newTabName = document.getElementById('cfg-tabname').value.trim();
   const newMods={};
   document.querySelectorAll('#s-mod-sec input[type="checkbox"]').forEach(cb=>{newMods[cb.dataset.mod]=cb.checked;});
   tab.modules = newMods;
@@ -1848,10 +1838,15 @@ async function saveSettings(){
     });
     await api('updateTabModules', { tabId: tab.id, modules: newMods });
     await api('saveYearConfigs', { configs: yearConfigs });
+    if (newTabName && newTabName !== tab.name) {
+      const result = await api('updateTabName', { tabId: tab.id, newName: newTabName });
+      if (result.success) tab.name = newTabName;
+    }
   } catch(err){ hideLoading(); alert('저장 실패: '+err.message); return; }
   hideLoading();
 
   syncBrand();
+  renderTabs();
   closeSettings(); renderContent();
 }
 function closeSettings(){document.getElementById('settings-overlay').classList.remove('open');}
